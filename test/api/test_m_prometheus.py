@@ -53,6 +53,7 @@ EXPECTED_METRICS = [
     "pihole_queries_forwarded",
     "pihole_queries_cached",
     "pihole_query_frequency",
+    "pihole_blocking_enabled",
     "pihole_queries_by_type",
     "pihole_queries_by_status",
     "pihole_queries_by_reply",
@@ -267,3 +268,31 @@ class TestPrometheusEndpoint:
                     "token": "", "perEntityMetrics": False, "topN": 100}}}}},
                 timeout=10,
             )
+
+    def test_blocking_enabled(self, api_session):
+        """pihole_blocking_enabled follows POST /api/dns/blocking"""
+        r = api_session.post(f"{FTL_URL}/api/auth/prometheus", timeout=10)
+        assert r.status_code == 200, f"token generation failed: {r.status_code} {r.text}"
+        token = r.json()["prometheus"]["token"]
+
+        def blocking_enabled():
+            values = {n: v for n, labels, v in _scrape(token) if not labels}
+            return values["pihole_blocking_enabled"]
+
+        try:
+            assert blocking_enabled() == 1, "blocking should be enabled by default"
+
+            r = api_session.post(f"{FTL_URL}/api/dns/blocking",
+                                 json={"blocking": False}, timeout=10)
+            assert r.status_code == 200, f"disabling blocking failed: {r.text}"
+            assert blocking_enabled() == 0
+
+            r = api_session.post(f"{FTL_URL}/api/dns/blocking",
+                                 json={"blocking": True}, timeout=10)
+            assert r.status_code == 200, f"enabling blocking failed: {r.text}"
+            assert blocking_enabled() == 1
+        finally:
+            # Leave blocking on and the endpoint disabled for later tests
+            api_session.post(f"{FTL_URL}/api/dns/blocking",
+                             json={"blocking": True}, timeout=10)
+            _set_token(api_session, "")

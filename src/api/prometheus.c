@@ -399,6 +399,18 @@ int api_metrics(struct ftl_conn *api)
 	fputs("# TYPE pihole_query_frequency gauge\n", fp);
 	fprintf(fp, "pihole_query_frequency %f\n", qps);
 
+	// Blocking state, the same effective status as GET /api/dns/blocking: a
+	// temporary (timed) status overrides the configured one. There is no
+	// meaningful value while dnsmasq failed to start, so the series is left
+	// out then instead of reporting blocking as being on or off
+	const enum blocking_status blocking = get_blockingstatus();
+	if(blocking == BLOCKING_ENABLED || blocking == BLOCKING_DISABLED)
+	{
+		fputs("# HELP pihole_blocking_enabled Whether DNS blocking is currently enabled (1) or disabled (0)\n", fp);
+		fputs("# TYPE pihole_blocking_enabled gauge\n", fp);
+		fprintf(fp, "pihole_blocking_enabled %d\n", blocking == BLOCKING_ENABLED ? 1 : 0);
+	}
+
 	// Query types (gauge - see note on the query totals above)
 	fputs("# HELP pihole_queries_by_type DNS queries by record type in FTL's history window\n", fp);
 	fputs("# TYPE pihole_queries_by_type gauge\n", fp);
